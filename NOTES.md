@@ -7,3 +7,11 @@
 - by analogy (apply a pattern on similar information)
 - causality (classify if a pattern is correlation or causality)
 - complete knowledge (given some facts, find patterns, ask for information needed to perfect patterns)
+
+# Training Data
+
+https://dmf.unicatt.it/~della/pythoncourse18/commedia.txt
+
+# Other
+
+(Object.entries(stats).map(([pattern, stat]) => ({pattern, ...stat, ration: stat.consequence_count / stat.condition_count})).sort((a,b) => b.ration - a.ration).slice(0, 100))
