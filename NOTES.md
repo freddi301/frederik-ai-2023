@@ -14,4 +14,4 @@ https://dmf.unicatt.it/~della/pythoncourse18/commedia.txt
 
 # Other
 
-(Object.entries(stats).map(([pattern, stat]) => ({pattern, ...stat, ration: stat.consequence_count / stat.condition_count})).sort((a,b) => b.ration - a.ration).slice(0, 100))
+(stats.map(([pattern, stat]) => ({pattern, ...stat, ration: stat.consequence_count / stat.condition_count})).sort((a,b) => b.ration - a.ration).slice(0, 100))

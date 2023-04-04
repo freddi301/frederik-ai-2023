@@ -22,6 +22,31 @@ fn main() -> Result<(), Error> {
     //println!("{:#?}", stats);
     println!("writing output");
     write_my_file(&stats)?;
+    println!("Predicted: {}", predict_sequence('a', 10, &stats));
+    println!("Predicted: {}", predict_sequence('b', 10, &stats));
+    println!("Predicted: {}", predict_sequence('c', 10, &stats));
+    println!("Predicted: {}", predict_sequence('d', 10, &stats));
+    println!("Predicted: {}", predict_sequence('e', 10, &stats));
+    println!("Predicted: {}", predict_sequence('f', 10, &stats));
+    println!("Predicted: {}", predict_sequence('g', 10, &stats));
+    println!("Predicted: {}", predict_sequence('h', 10, &stats));
+    println!("Predicted: {}", predict_sequence('i', 10, &stats));
+    println!("Predicted: {}", predict_sequence('j', 10, &stats));
+    println!("Predicted: {}", predict_sequence('k', 10, &stats));
+    println!("Predicted: {}", predict_sequence('l', 10, &stats));
+    println!("Predicted: {}", predict_sequence('m', 10, &stats));
+    println!("Predicted: {}", predict_sequence('n', 10, &stats));
+    println!("Predicted: {}", predict_sequence('o', 10, &stats));
+    println!("Predicted: {}", predict_sequence('p', 10, &stats));
+    println!("Predicted: {}", predict_sequence('q', 10, &stats));
+    println!("Predicted: {}", predict_sequence('r', 10, &stats));
+    println!("Predicted: {}", predict_sequence('s', 10, &stats));
+    println!("Predicted: {}", predict_sequence('t', 10, &stats));
+    println!("Predicted: {}", predict_sequence('u', 10, &stats));
+    println!("Predicted: {}", predict_sequence('v', 10, &stats));
+    println!("Predicted: {}", predict_sequence('x', 10, &stats));
+    println!("Predicted: {}", predict_sequence('y', 10, &stats));
+    println!("Predicted: {}", predict_sequence('z', 10, &stats));
     return Ok(());
 }
 
@@ -41,11 +66,10 @@ fn create_txt_patterns(characters: &Vec<char>) -> HashSet<Pattern> {
     for i in 0..characters.len() {
         if let Some(current_character) = characters.get(i) {
             if let Option::Some(next_character) = characters.get(i + 1) {
-                let pattern = Pattern {
+                patterns.insert(Pattern {
                     condition: Observation::CharacterAtSlidingPosition(*current_character, 0),
                     consequence: Observation::CharacterAtSlidingPosition(*next_character, 1),
-                };
-                patterns.insert(pattern);
+                });
             }
         }
     }
@@ -77,13 +101,56 @@ fn scan_text(
 
 fn write_my_file(stats: &HashMap<Pattern, PatternStats>) -> Result<(), Error> {
     let mut file = File::create("output.json")?;
-    let mut json_friendly: HashMap<String, PatternStats> = HashMap::new();
+    let mut json_friendly: Vec<(Pattern, PatternStats)> = Vec::new();
     for (key, value) in stats {
-        json_friendly.insert(format!("{:?}", key), *value);
+        json_friendly.push((*key, *value));
     }
     let text = serde_json::to_string(&json_friendly)?;
     file.write_all(text.as_bytes())?;
     return Ok(());
+}
+
+fn predict(character: char, stats: &HashMap<Pattern, PatternStats>) -> Option<char> {
+    if let Some((pattern, _)) = stats
+        .iter()
+        .filter(|(pattern, stats)| {
+            (pattern.condition == Observation::CharacterAtSlidingPosition(character, 0))
+                && stats.ratio() > 0.1
+                && (if let Observation::CharacterAtSlidingPosition(next_char, _) =
+                    pattern.consequence
+                {
+                    next_char != ' '
+                } else {
+                    true
+                })
+        })
+        .max_by(|a, b| a.1.ratio().partial_cmp(&b.1.ratio()).unwrap())
+    {
+        match pattern.consequence {
+            Observation::CharacterAtSlidingPosition(next_character, _) => {
+                return Some(next_character)
+            }
+        }
+    }
+    return None;
+}
+
+fn predict_sequence(
+    starting_character: char,
+    max_length: usize,
+    stats: &HashMap<Pattern, PatternStats>,
+) -> String {
+    let mut result: String = String::new();
+    result.push(starting_character);
+    let mut current_character = starting_character;
+    while let Some(char) = predict(current_character, stats) {
+        current_character = char;
+        result.push(char);
+        if result.len() >= max_length {
+            break;
+        }
+    }
+    return result;
 }
 
 impl Observation {
@@ -112,6 +179,12 @@ enum Observation {
 
 #[derive(Debug, Hash, PartialEq, Eq, Copy, Clone, Serialize, Deserialize)]
 struct PatternStats {
-    condition_count: i64,
-    consequence_count: i64,
+    condition_count: u32,
+    consequence_count: u32,
+}
+
+impl PatternStats {
+    fn ratio(&self) -> f64 {
+        return (self.consequence_count as f64) / (self.condition_count as f64);
+    }
 }
