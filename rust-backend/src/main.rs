@@ -89,13 +89,13 @@ impl MutationRoot {
                         current_character: *current_character,
                         next_character: *next_character,
                     });
-                    // if let Some(next_next_character) = data.get(index + 2) {
-                    //     patterns.insert(Pattern::NextCharacterAfterTwo {
-                    //         current_character_1: *current_character,
-                    //         current_character_2: *next_character,
-                    //         next_character: *next_next_character,
-                    //     });
-                    // }
+                    if let Some(next_next_character) = data.get(index + 2) {
+                        patterns.insert(Pattern::NextCharacterAfterTwo {
+                            current_character_1: *current_character,
+                            current_character_2: *next_character,
+                            next_character: *next_next_character,
+                        });
+                    }
                 }
                 if index > 0 {
                     if let Some(previous_character) = data.get(index - 1) {
@@ -135,23 +135,23 @@ impl MutationRoot {
                                 }
                             }
                         }
-                        // if let Some(data_next_next_character) = data.get(index + 2) {
-                        //     if let Pattern::NextCharacterAfterTwo {
-                        //         current_character_1,
-                        //         current_character_2,
-                        //         next_character,
-                        //     } = pattern
-                        //     {
-                        //         if *current_character_1 == *data_current_character
-                        //             && *current_character_2 == *data_next_character
-                        //         {
-                        //             stats.condition_count += 1;
-                        //             if *next_character == *data_next_next_character {
-                        //                 stats.consequence_count += 1
-                        //             }
-                        //         }
-                        //     }
-                        // }
+                        if let Some(data_next_next_character) = data.get(index + 2) {
+                            if let Pattern::NextCharacterAfterTwo {
+                                current_character_1,
+                                current_character_2,
+                                next_character,
+                            } = pattern
+                            {
+                                if *current_character_1 == *data_current_character
+                                    && *current_character_2 == *data_next_character
+                                {
+                                    stats.condition_count += 1;
+                                    if *next_character == *data_next_next_character {
+                                        stats.consequence_count += 1
+                                    }
+                                }
+                            }
+                        }
                     }
                     if index > 0 {
                         if let Some(data_previous_character) = data.get(index - 1) {
@@ -246,16 +246,16 @@ fn model_to_csv_file(file_path: &str, pattern_stats: &HashMap<Pattern, PatternSt
                 "".to_string(),
                 previous_character.to_string(),
             ],
-            // Pattern::NextCharacterAfterTwo {
-            //     current_character_1,
-            //     current_character_2,
-            //     next_character,
-            // } => vec![
-            //     "NextCharacterAfterTwo".to_string(),
-            //     format!("{current_character_1}{current_character_2}").to_string(),
-            //     next_character.to_string(),
-            //     "".to_string(),
-            // ],
+            Pattern::NextCharacterAfterTwo {
+                current_character_1,
+                current_character_2,
+                next_character,
+            } => vec![
+                "NextCharacterAfterTwo".to_string(),
+                format!("{current_character_1}{current_character_2}").to_string(),
+                next_character.to_string(),
+                "".to_string(),
+            ],
         };
         let stat_columns = vec![
             stats.condition_count.to_string(),
@@ -321,6 +321,22 @@ fn predict_next_character(
                 current_character,
                 previous_character,
             } => {}
+            Pattern::NextCharacterAfterTwo {
+                current_character_1,
+                current_character_2,
+                next_character,
+            } => {
+                if sequence.len() > 1 {
+                    if let Some(last_last_character) = sequence.get(sequence.len() - 2) {
+                        if *last_last_character == *current_character_1
+                            && *last_character == *current_character_2
+                        {
+                            *probability_by_character.entry(*next_character).or_default() +=
+                                stats.accuracy()
+                        }
+                    }
+                }
+            }
         }
     }
     *probability_by_character.entry(' ').or_default() *= 0.5;
@@ -369,11 +385,11 @@ enum Pattern {
         current_character: char,
         previous_character: char,
     },
-    // NextCharacterAfterTwo {
-    //     current_character_1: char,
-    //     current_character_2: char,
-    //     next_character: char,
-    // },
+    NextCharacterAfterTwo {
+        current_character_1: char,
+        current_character_2: char,
+        next_character: char,
+    },
 }
 
 #[derive(Default, Clone, Copy, Serialize, Deserialize)]
