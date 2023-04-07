@@ -3,6 +3,7 @@ use async_graphql::{
 };
 use async_std::task;
 use indicatif::ProgressBar;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -22,6 +23,41 @@ impl QueryRoot {
         let model = model_from_file(&model_input_path);
         model_to_result(&model)
     }
+    async fn predict(
+        &self,
+        model_input_path: String,
+        text: String,
+        length: usize,
+    ) -> PredictResult {
+        let model = model_from_file(&model_input_path);
+        let sequence = clean_data(&text);
+        let details: Vec<Vec<PredictDetail>> = predict_next_characters(&model, &sequence, length)
+            .iter()
+            .map(|probability_by_character| {
+                let mut result: Vec<PredictDetail> = probability_by_character
+                    .iter()
+                    .map(|(character, probability)| PredictDetail {
+                        character: *character,
+                        probability: *probability,
+                    })
+                    .collect();
+                result.sort_by(|a, b| b.probability.partial_cmp(&a.probability).unwrap());
+                result
+            })
+            .collect();
+        let sequence: String = [
+            sequence,
+            details
+                .iter()
+                .map(|probabilities| probabilities.first().unwrap().character)
+                .collect(),
+        ]
+        .concat()
+        .iter()
+        .collect();
+        let result = PredictResult { sequence, details };
+        result
+    }
 }
 
 struct MutationRoot;
@@ -38,7 +74,7 @@ impl MutationRoot {
     ) -> Result<Vec<PatternResult>> {
         let data_load_now = Instant::now();
         let string = read_file_to_string(&text_input_file_path).expect("could not read file");
-        let data: Vec<char> = string.chars().take(slice.unwrap_or(string.len())).collect();
+        let data = clean_data(&string[..slice.unwrap_or(string.len())].to_string());
         let data_load_duration = data_load_now.elapsed().as_secs();
         let data_length = data.len();
         let pattern_creation_now = Instant::now();
@@ -53,13 +89,13 @@ impl MutationRoot {
                         current_character: *current_character,
                         next_character: *next_character,
                     });
-                    if let Some(next_next_character) = data.get(index + 2) {
-                        patterns.insert(Pattern::NextCharacterAfterTwo {
-                            current_character_1: *current_character,
-                            current_character_2: *next_character,
-                            next_character: *next_next_character,
-                        });
-                    }
+                    // if let Some(next_next_character) = data.get(index + 2) {
+                    //     patterns.insert(Pattern::NextCharacterAfterTwo {
+                    //         current_character_1: *current_character,
+                    //         current_character_2: *next_character,
+                    //         next_character: *next_next_character,
+                    //     });
+                    // }
                 }
                 if index > 0 {
                     if let Some(previous_character) = data.get(index - 1) {
@@ -99,23 +135,23 @@ impl MutationRoot {
                                 }
                             }
                         }
-                        if let Some(data_next_next_character) = data.get(index + 2) {
-                            if let Pattern::NextCharacterAfterTwo {
-                                current_character_1,
-                                current_character_2,
-                                next_character,
-                            } = pattern
-                            {
-                                if *current_character_1 == *data_current_character
-                                    && *current_character_2 == *data_next_character
-                                {
-                                    stats.condition_count += 1;
-                                    if *next_character == *data_next_next_character {
-                                        stats.consequence_count += 1
-                                    }
-                                }
-                            }
-                        }
+                        // if let Some(data_next_next_character) = data.get(index + 2) {
+                        //     if let Pattern::NextCharacterAfterTwo {
+                        //         current_character_1,
+                        //         current_character_2,
+                        //         next_character,
+                        //     } = pattern
+                        //     {
+                        //         if *current_character_1 == *data_current_character
+                        //             && *current_character_2 == *data_next_character
+                        //         {
+                        //             stats.condition_count += 1;
+                        //             if *next_character == *data_next_next_character {
+                        //                 stats.consequence_count += 1
+                        //             }
+                        //         }
+                        //     }
+                        // }
                     }
                     if index > 0 {
                         if let Some(data_previous_character) = data.get(index - 1) {
@@ -210,16 +246,16 @@ fn model_to_csv_file(file_path: &str, pattern_stats: &HashMap<Pattern, PatternSt
                 "".to_string(),
                 previous_character.to_string(),
             ],
-            Pattern::NextCharacterAfterTwo {
-                current_character_1,
-                current_character_2,
-                next_character,
-            } => vec![
-                "NextCharacterAfterTwo".to_string(),
-                format!("{current_character_1}{current_character_2}").to_string(),
-                next_character.to_string(),
-                "".to_string(),
-            ],
+            // Pattern::NextCharacterAfterTwo {
+            //     current_character_1,
+            //     current_character_2,
+            //     next_character,
+            // } => vec![
+            //     "NextCharacterAfterTwo".to_string(),
+            //     format!("{current_character_1}{current_character_2}").to_string(),
+            //     next_character.to_string(),
+            //     "".to_string(),
+            // ],
         };
         let stat_columns = vec![
             stats.condition_count.to_string(),
@@ -259,6 +295,67 @@ fn model_from_file(file_path: &str) -> HashMap<Pattern, PatternStats> {
     model
 }
 
+fn predict_next_character(
+    model: &HashMap<Pattern, PatternStats>,
+    sequence: &Vec<char>,
+) -> HashMap<char, f32> {
+    let last_character = sequence.last().unwrap();
+    let mut probability_by_character: HashMap<char, f32> = HashMap::new();
+    for (pattern, stats) in model {
+        match pattern {
+            Pattern::CurrentCharacterIs { current_character } => {
+                *probability_by_character
+                    .entry(*current_character)
+                    .or_default() += stats.accuracy();
+            }
+            Pattern::NextCharacterIs {
+                current_character,
+                next_character,
+            } => {
+                if *last_character == *current_character {
+                    *probability_by_character.entry(*next_character).or_default() +=
+                        stats.accuracy()
+                }
+            }
+            Pattern::PreviousCharacterIs {
+                current_character,
+                previous_character,
+            } => {}
+        }
+    }
+    *probability_by_character.entry(' ').or_default() *= 0.5;
+    probability_by_character
+}
+
+fn predict_next_characters(
+    model: &HashMap<Pattern, PatternStats>,
+    sequence: &Vec<char>,
+    length: usize,
+) -> Vec<HashMap<char, f32>> {
+    let mut full_sequence = sequence.clone();
+    let mut result = Vec::new();
+    while result.len() < length {
+        let predictions = predict_next_character(model, &full_sequence);
+        let (predicted_character, _) = predictions
+            .iter()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap())
+            .unwrap();
+        full_sequence.push(*predicted_character);
+        result.push(predictions);
+    }
+    result
+}
+
+fn clean_data(string: &String) -> Vec<char> {
+    let is_alpha = Regex::new("[a-zA-Z .]").unwrap();
+    let cleaned = string
+        .chars()
+        .map(|character| character.to_ascii_lowercase())
+        .filter(|character| is_alpha.is_match(&character.to_string()))
+        .collect();
+    cleaned
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 enum Pattern {
     CurrentCharacterIs {
@@ -272,11 +369,11 @@ enum Pattern {
         current_character: char,
         previous_character: char,
     },
-    NextCharacterAfterTwo {
-        current_character_1: char,
-        current_character_2: char,
-        next_character: char,
-    },
+    // NextCharacterAfterTwo {
+    //     current_character_1: char,
+    //     current_character_2: char,
+    //     next_character: char,
+    // },
 }
 
 #[derive(Default, Clone, Copy, Serialize, Deserialize)]
@@ -297,6 +394,18 @@ struct PatternResult {
     condition_count: u32,
     consequence_count: u32,
     accuracy: f32,
+}
+
+#[derive(SimpleObject, Serialize, Deserialize)]
+struct PredictDetail {
+    character: char,
+    probability: f32,
+}
+
+#[derive(SimpleObject, Serialize, Deserialize)]
+struct PredictResult {
+    sequence: String,
+    details: Vec<Vec<PredictDetail>>,
 }
 
 type TideResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

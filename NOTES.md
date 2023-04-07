@@ -26,6 +26,19 @@ https://download.feedbooks.net/book/7384.epub?t=1548245072&filename=il-piccolo-p
 
 # Other
 
+lazily sinthetize all possible predictions with no duplication
+
+make it a lazy graph width predictions as nodes and edges that indicates fluctuations in complexity, accuracy, occurrences
+
+sinthetize the less complex predictions with highest accuracy and occurrence
+
+given some facts predict what happens next, with backtracking
+
+- given current facts, predict most plausible one, add it to headings
+- rank every heading with average accuracy based on all apredictions and predicted facts
+- extend heading with highest
+- present the sequence wiht highest accuracy as result
+
 ```graphql
 mutation Train {
   train(
