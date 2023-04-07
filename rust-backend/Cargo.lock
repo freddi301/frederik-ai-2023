@@ -1619,6 +1619,7 @@ dependencies = [
  "async-std",
  "csv",
  "indicatif",
+ "regex",
  "ron",
  "serde",
  "serde_json",

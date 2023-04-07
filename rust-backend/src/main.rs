@@ -2,6 +2,7 @@ use async_graphql::{
     http::GraphiQLSource, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject,
 };
 use async_std::task;
+use regex::Regex;
 use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
@@ -44,6 +45,13 @@ impl QueryRoot {
                         current_character: *current_character,
                         next_character: *next_character,
                     });
+                    if let Some(next_next_character) = data.get(index + 2) {
+                        patterns.insert(Pattern::NextCharacterAfterTwo {
+                            current_character_1: *current_character,
+                            current_character_2: *next_character,
+                            next_character: *next_next_character,
+                        });
+                    }
                 }
                 if index > 0 {
                     if let Some(previous_character) = data.get(index - 1) {
@@ -78,6 +86,23 @@ impl QueryRoot {
                                 stats.condition_count += 1;
                                 if *next_character == *data_next_character {
                                     stats.consequence_count += 1
+                                }
+                            }
+                        }
+                        if let Some(data_next_next_character) = data.get(index + 2) {
+                            if let Pattern::NextCharacterAfterTwo {
+                                current_character_1,
+                                current_character_2,
+                                next_character,
+                            } = pattern
+                            {
+                                if *current_character_1 == *data_current_character
+                                    && *current_character_2 == *data_next_character
+                                {
+                                    stats.condition_count += 1;
+                                    if *next_character == *data_next_next_character {
+                                        stats.consequence_count += 1
+                                    }
                                 }
                             }
                         }
@@ -153,6 +178,16 @@ impl QueryRoot {
                         "".to_string(),
                         previous_character.to_string(),
                     ],
+                    Pattern::NextCharacterAfterTwo {
+                        current_character_1,
+                        current_character_2,
+                        next_character,
+                    } => vec![
+                        "NextCharacterAfterTwo".to_string(),
+                        format!("{current_character_1}{current_character_2}").to_string(),
+                        next_character.to_string(),
+                        "".to_string(),
+                    ],
                 };
                 let stat_columns = vec![
                     stats.condition_count.to_string(),
@@ -192,6 +227,11 @@ enum Pattern {
     PreviousCharacterIs {
         current_character: char,
         previous_character: char,
+    },
+    NextCharacterAfterTwo {
+        current_character_1: char,
+        current_character_2: char,
+        next_character: char,
     },
 }
 
