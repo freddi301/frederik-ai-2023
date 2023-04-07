@@ -1,9 +1,9 @@
 use async_graphql::{
-    http::GraphiQLSource, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject,
+    http::GraphiQLSource, EmptySubscription, Object, Result, Schema, SimpleObject,
 };
 use async_std::task;
-use regex::Regex;
-use serde::Serialize;
+use indicatif::ProgressBar;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     env,
@@ -18,16 +18,24 @@ struct QueryRoot;
 
 #[Object]
 impl QueryRoot {
-    // async fn add(&self, a: i32, b: i32) -> i32 {
-    //     a + b
-    // }
-    async fn read(
+    async fn model(&self, model_input_path: String) -> Vec<PatternResult> {
+        let model = model_from_file(&model_input_path);
+        model_to_result(&model)
+    }
+}
+
+struct MutationRoot;
+
+#[Object]
+impl MutationRoot {
+    async fn train(
         &self,
         text_input_file_path: String,
         slice: Option<usize>,
         csv_output_file_path: Option<String>,
         json_output_file_path: Option<String>,
-    ) -> Vec<PatternResult> {
+        model_output_file_path: Option<String>,
+    ) -> Result<Vec<PatternResult>> {
         let data_load_now = Instant::now();
         let string = read_file_to_string(&text_input_file_path).expect("could not read file");
         let data: Vec<char> = string.chars().take(slice.unwrap_or(string.len())).collect();
@@ -65,8 +73,10 @@ impl QueryRoot {
         }
         let pattern_creation_duration = pattern_creation_now.elapsed().as_secs();
         let pattern_stats_now = Instant::now();
+        let bar = ProgressBar::new(patterns.len() as u64);
         let mut pattern_stats: HashMap<Pattern, PatternStats> = HashMap::new();
         for pattern in &patterns {
+            bar.inc(1);
             let stats = pattern_stats.entry(pattern.clone()).or_default();
             for index in 0..data_length {
                 if let Some(data_current_character) = data.get(index) {
@@ -127,95 +137,129 @@ impl QueryRoot {
             }
         }
         let pattern_stats_duration = pattern_stats_now.elapsed().as_secs();
+        bar.finish();
         let report_now = Instant::now();
-        let mut result: Vec<PatternResult> = Vec::new();
-        for (pattern, stats) in &pattern_stats {
-            result.push(PatternResult {
-                pattern: format!("{:?}", pattern),
-                condition_count: stats.condition_count,
-                consequence_count: stats.consequence_count,
-                accuray: stats.accuracy(),
-            })
-        }
-        result.sort_by(|a, b| b.accuray.partial_cmp(&a.accuray).unwrap());
         if let Some(path) = csv_output_file_path {
-            let file = std::fs::File::create(path).expect("culd not create csv file");
-            let mut csv_writer = csv::Writer::from_writer(file);
-            csv_writer
-                .write_record(&[
-                    "pattern",
-                    "current_character",
-                    "next_character",
-                    "previous_character",
-                    "condition_count",
-                    "consequence_count",
-                    "accuracy",
-                ])
-                .expect("could not write csv header");
-            for (pattern, stats) in &pattern_stats {
-                let pattern_columns: Vec<String> = match pattern {
-                    Pattern::CurrentCharacterIs { current_character } => vec![
-                        "CurrentCharacterIs".to_string(),
-                        current_character.to_string(),
-                        "".to_string(),
-                        "".to_string(),
-                    ],
-                    Pattern::NextCharacterIs {
-                        current_character,
-                        next_character,
-                    } => vec![
-                        "NextCharacterIs".to_string(),
-                        current_character.to_string(),
-                        next_character.to_string(),
-                        "".to_string(),
-                    ],
-                    Pattern::PreviousCharacterIs {
-                        current_character,
-                        previous_character,
-                    } => vec![
-                        "PreviousCharacterIs".to_string(),
-                        current_character.to_string(),
-                        "".to_string(),
-                        previous_character.to_string(),
-                    ],
-                    Pattern::NextCharacterAfterTwo {
-                        current_character_1,
-                        current_character_2,
-                        next_character,
-                    } => vec![
-                        "NextCharacterAfterTwo".to_string(),
-                        format!("{current_character_1}{current_character_2}").to_string(),
-                        next_character.to_string(),
-                        "".to_string(),
-                    ],
-                };
-                let stat_columns = vec![
-                    stats.condition_count.to_string(),
-                    stats.consequence_count.to_string(),
-                    stats.accuracy().to_string(),
-                ];
-                csv_writer
-                    .write_record(&[pattern_columns, stat_columns].concat())
-                    .expect("could not write csv line");
-            }
-            csv_writer.flush().expect("could not write csv file");
+            model_to_csv_file(&path, &pattern_stats);
         }
         if let Some(path) = json_output_file_path {
-            let mut file = std::fs::File::create(path).expect("culd not create json file");
-            let result: Vec<(&Pattern, &PatternStats)> = pattern_stats.iter().collect();
-            let string = serde_json::to_string(&result).expect("could not serialize json file");
-            file.write_all(string.as_bytes())
-                .expect("could not write json file");
+            model_to_json_file(&path, &pattern_stats)
+        }
+        if let Some(path) = model_output_file_path {
+            model_to_file(&path, &pattern_stats)
         }
         let report_duration = report_now.elapsed().as_secs();
         println!(
             "load: {data_load_duration} create: {pattern_creation_duration} check: {pattern_stats_duration} report: {report_duration}",
         );
-        result
+        Ok(model_to_result(&pattern_stats))
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize)]
+fn model_to_result(pattern_stats: &HashMap<Pattern, PatternStats>) -> Vec<PatternResult> {
+    let mut result: Vec<PatternResult> = Vec::new();
+    for (pattern, stats) in pattern_stats {
+        result.push(PatternResult {
+            pattern: format!("{:?}", pattern),
+            condition_count: stats.condition_count,
+            consequence_count: stats.consequence_count,
+            accuracy: stats.accuracy(),
+        })
+    }
+    result.sort_by(|a, b| b.accuracy.partial_cmp(&a.accuracy).unwrap());
+    result
+}
+
+fn model_to_csv_file(file_path: &str, pattern_stats: &HashMap<Pattern, PatternStats>) {
+    let file = std::fs::File::create(file_path).expect("culd not create csv file");
+    let mut csv_writer = csv::Writer::from_writer(file);
+    csv_writer
+        .write_record(&[
+            "pattern",
+            "current_character",
+            "next_character",
+            "previous_character",
+            "condition_count",
+            "consequence_count",
+            "accuracy",
+        ])
+        .expect("could not write csv header");
+    for (pattern, stats) in pattern_stats {
+        let pattern_columns: Vec<String> = match pattern {
+            Pattern::CurrentCharacterIs { current_character } => vec![
+                "CurrentCharacterIs".to_string(),
+                current_character.to_string(),
+                "".to_string(),
+                "".to_string(),
+            ],
+            Pattern::NextCharacterIs {
+                current_character,
+                next_character,
+            } => vec![
+                "NextCharacterIs".to_string(),
+                current_character.to_string(),
+                next_character.to_string(),
+                "".to_string(),
+            ],
+            Pattern::PreviousCharacterIs {
+                current_character,
+                previous_character,
+            } => vec![
+                "PreviousCharacterIs".to_string(),
+                current_character.to_string(),
+                "".to_string(),
+                previous_character.to_string(),
+            ],
+            Pattern::NextCharacterAfterTwo {
+                current_character_1,
+                current_character_2,
+                next_character,
+            } => vec![
+                "NextCharacterAfterTwo".to_string(),
+                format!("{current_character_1}{current_character_2}").to_string(),
+                next_character.to_string(),
+                "".to_string(),
+            ],
+        };
+        let stat_columns = vec![
+            stats.condition_count.to_string(),
+            stats.consequence_count.to_string(),
+            stats.accuracy().to_string(),
+        ];
+        csv_writer
+            .write_record(&[pattern_columns, stat_columns].concat())
+            .expect("could not write csv line");
+    }
+    csv_writer.flush().expect("could not write csv file");
+}
+
+fn model_to_json_file(file_path: &str, pattern_stats: &HashMap<Pattern, PatternStats>) {
+    let mut file = std::fs::File::create(file_path).expect("culd not create json file");
+    let result: Vec<(&Pattern, &PatternStats)> = pattern_stats.iter().collect();
+    let string = serde_json::to_string(&result).expect("could not serialize json file");
+    file.write_all(string.as_bytes())
+        .expect("could not write json file");
+}
+
+fn model_to_file(file_path: &str, pattern_stats: &HashMap<Pattern, PatternStats>) {
+    let mut file = File::create(file_path).expect("could not create model file");
+    let text = ron::ser::to_string_pretty(&pattern_stats, ron::ser::PrettyConfig::default())
+        .expect("could not serialize model");
+    file.write_all(text.as_bytes())
+        .expect("could not write model file");
+}
+
+fn model_from_file(file_path: &str) -> HashMap<Pattern, PatternStats> {
+    let mut file = File::open(file_path).expect("could not open model file");
+    let mut text = String::new();
+    file.read_to_string(&mut text)
+        .expect("could not read model file");
+    let model: HashMap<Pattern, PatternStats> =
+        ron::from_str(&text).expect("could not deserialize model");
+    model
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 enum Pattern {
     CurrentCharacterIs {
         current_character: char,
@@ -235,7 +279,7 @@ enum Pattern {
     },
 }
 
-#[derive(Default, Serialize, Clone, Copy)]
+#[derive(Default, Clone, Copy, Serialize, Deserialize)]
 struct PatternStats {
     condition_count: u32,
     consequence_count: u32,
@@ -247,12 +291,12 @@ impl PatternStats {
     }
 }
 
-#[derive(SimpleObject, Serialize)]
+#[derive(SimpleObject, Serialize, Deserialize)]
 struct PatternResult {
     pattern: String,
     condition_count: u32,
     consequence_count: u32,
-    accuray: f32,
+    accuracy: f32,
 }
 
 type TideResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -262,7 +306,7 @@ fn main() -> TideResult<()> {
 }
 
 async fn run_graphql_server() -> TideResult<()> {
-    let schema = Schema::new(QueryRoot, EmptyMutation, EmptySubscription);
+    let schema = Schema::new(QueryRoot, MutationRoot, EmptySubscription);
     let listen_addr = env::var("LISTEN_ADDR").unwrap_or_else(|_| "localhost:8000".to_owned());
     let mut app = tide::new();
     app.at("/graphql").post(async_graphql_tide::graphql(schema));
@@ -285,17 +329,3 @@ fn read_file_to_string(file_path: &str) -> Result<String, Error> {
     file.read_to_string(&mut text)?;
     return Ok(text);
 }
-
-// fn save_to_file(model: &Model, file_name: &str) -> Result<(), Error> {
-//     let mut file = File::create(file_name)?;
-//     let text = ron::to_string(&model).expect("could not serialize model");
-//     file.write_all(text.as_bytes())?;
-//     return Ok(());
-// }
-// fn load_from_file(file_name: &str) -> Result<Model, Error> {
-//     let mut file = File::open(file_name)?;
-//     let mut text = String::new();
-//     file.read_to_string(&mut text)?;
-//     let model = ron::from_str(&text).expect("could not deserialize model");
-//     return Ok(model);
-// }

@@ -25,3 +25,28 @@ https://dmf.unicatt.it/~della/pythoncourse18/commedia.txt
 https://download.feedbooks.net/book/7384.epub?t=1548245072&filename=il-piccolo-principe
 
 # Other
+
+```graphql
+mutation Train {
+  train(
+    textInputFilePath: "il-piccolo-principe.txt"
+    csvOutputFilePath: "il-piccolo-principe.csv"
+    jsonOutputFilePath: "il-piccolo-principe.json"
+    modelOutputFilePath: "il-piccolo-principe.ron"
+  ) {
+    pattern
+    accuracy
+    conditionCount
+    consequenceCount
+  }
+}
+
+query Model {
+  model(modelInputPath: "il-piccolo-principe.ron") {
+    pattern
+    accuracy
+    conditionCount
+    consequenceCount
+  }
+}
+```
