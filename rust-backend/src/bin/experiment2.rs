@@ -17,7 +17,10 @@
 // for each turned on input node, increment its count
 // link_count / node_count is the percentage ol probability that when the node is turned on, also the linked node is
 
-use std::collections::HashMap;
+use std::{
+    cmp::Ordering,
+    collections::{BinaryHeap, HashMap},
+};
 
 use utils::clean_data;
 
@@ -85,6 +88,26 @@ impl<Primitive: Clone> Term<Primitive> {
     }
 }
 
+fn sythetize_term_from_most_occurrent(
+    most_occurrent_terms: &mut BinaryHeap<TermOccurencesPair<CharacterInSlidingWindow>>,
+    data: &Vec<char>,
+) {
+    let left = most_occurrent_terms.pop().unwrap();
+    let not_term = Term::Not(Box::new(left.0.clone()));
+    let not_term_occurrences = not_term.get_term_occurrences::<CharacterInSlidingWindow>(data);
+    most_occurrent_terms.push(TermOccurencesPair(not_term, not_term_occurrences));
+    let right = most_occurrent_terms.pop().unwrap();
+    let and_term = Term::And(Box::new(left.0.clone()), Box::new(right.0.clone()));
+    let and_term_occurrences = and_term.get_term_occurrences::<CharacterInSlidingWindow>(data);
+    most_occurrent_terms.push(TermOccurencesPair(and_term, and_term_occurrences));
+    let left = most_occurrent_terms.pop().unwrap();
+    let or_term = Term::Or(Box::new(left.0.clone()), Box::new(left.0.clone()));
+    let or_term_occurrences = or_term.get_term_occurrences::<CharacterInSlidingWindow>(data);
+    most_occurrent_terms.push(TermOccurencesPair(or_term, or_term_occurrences));
+    most_occurrent_terms.push(left);
+    most_occurrent_terms.push(right);
+}
+
 impl Term<CharacterInSlidingWindow> {
     fn check(&self, data: &Vec<char>, index: usize) -> bool {
         match self {
@@ -94,9 +117,69 @@ impl Term<CharacterInSlidingWindow> {
             Term::Or(left, right) => left.check(data, index) || right.check(data, index),
         }
     }
+    fn get_term_occurrences<Primitive>(&self, data: &Vec<char>) -> u32 {
+        let mut occurrences = 0;
+        for index in 0..data.len() {
+            if self.check(data, index) {
+                occurrences += 1
+            }
+        }
+        occurrences
+    }
 }
 
 fn main() {
+    let string =
+        utils::read_file_to_string("il-piccolo-principe.txt").expect("could not read file");
+    let data = clean_data(&string);
+    println!("dataset size: {}", data.len());
+    let alphabet = generate_latin_lowercase_alphabet();
+    let primitives = CharacterInSlidingWindow::generate_permutations(&alphabet, 2);
+    println!("primitives: {}", primitives.len());
+    let input_terms: Vec<Term<CharacterInSlidingWindow>> = primitives
+        .iter()
+        .map(|primitive| Term::Input(primitive.clone()))
+        .collect();
+    let mut most_occurent_terms: BinaryHeap<TermOccurencesPair<CharacterInSlidingWindow>> =
+        BinaryHeap::new();
+    for term in &input_terms {
+        let mut occurrences: u32 = 0;
+        for index in 0..data.len() {
+            if term.check(&data, index) {
+                occurrences += 1;
+            }
+        }
+        most_occurent_terms.push(TermOccurencesPair(term.clone(), occurrences));
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct TermOccurencesPair<Primitive: Clone>(Term<Primitive>, u32);
+
+impl<Primitive: Clone + Eq> Ord for TermOccurencesPair<Primitive> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.1.cmp(&self.1)
+    }
+}
+impl<Primitive: Clone + Eq> PartialOrd for TermOccurencesPair<Primitive> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        other.1.partial_cmp(&self.1)
+    }
+}
+
+fn permutations_example() {
+    let alphabet = generate_latin_lowercase_alphabet();
+    let primitives = CharacterInSlidingWindow::generate_permutations(&alphabet, 2);
+    let mut all: Vec<Term<CharacterInSlidingWindow>> = primitives
+        .into_iter()
+        .map(|primitive| Term::Input(primitive))
+        .collect();
+    Term::extend_complexity_by_one(&mut all);
+    dbg!(&all);
+    println!("{}", all.len());
+}
+
+fn permutations_occurrence_example() {
     let string =
         utils::read_file_to_string("il-piccolo-principe.txt").expect("could not read file");
     let data = clean_data(&string);
@@ -140,18 +223,6 @@ fn main() {
     }
     progress.finish();
     term_occurences_to_csv_file("term_occurrences.csv", &all_occurrences, data.len())
-}
-
-fn show_permutations_example() {
-    let alphabet = generate_latin_lowercase_alphabet();
-    let primitives = CharacterInSlidingWindow::generate_permutations(&alphabet, 2);
-    let mut all: Vec<Term<CharacterInSlidingWindow>> = primitives
-        .into_iter()
-        .map(|primitive| Term::Input(primitive))
-        .collect();
-    Term::extend_complexity_by_one(&mut all);
-    dbg!(&all);
-    println!("{}", all.len());
 }
 
 fn primitive_occurences_to_csv_file(
