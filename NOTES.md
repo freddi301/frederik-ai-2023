@@ -38,3 +38,17 @@ given some facts predict what happens next, with backtracking
 - rank every heading with average accuracy based on all apredictions and predicted facts
 - extend heading with highest
 - present the sequence wiht highest accuracy as result
+
+conseguenza: A causa sicuramente B, B può accadere anche in assenza di A
+se A allora B per forza
+se B allora A non è detto
+
+causa: B è sicuramente causato da A, non da altro
+se A allora B per forza
+se B allora A per forza
+
+generalizzazione: un insieme di eventi AN causano sempre la stessa conseguenza B, AN può essere generalizzato come AN segue B
+se A1 allora B per forza
+se B allora A1 non è detto
+se A2 allora B per forza
+se B allora A2 non è detto
