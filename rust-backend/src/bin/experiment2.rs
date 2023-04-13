@@ -17,14 +17,14 @@
 // for each turned on input node, increment its count
 // link_count / node_count is the percentage ol probability that when the node is turned on, also the linked node is
 
+use regex::Regex;
+use std::io::Error;
 use std::{
     cmp::Ordering,
     collections::{BinaryHeap, HashMap},
+    fs::File,
+    io::Read,
 };
-
-use utils::clean_data;
-
-mod utils;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct CharacterInSlidingWindow {
@@ -129,8 +129,7 @@ impl Term<CharacterInSlidingWindow> {
 }
 
 fn main() {
-    let string =
-        utils::read_file_to_string("il-piccolo-principe.txt").expect("could not read file");
+    let string = read_file_to_string("il-piccolo-principe.txt").expect("could not read file");
     let data = clean_data(&string);
     println!("dataset size: {}", data.len());
     let alphabet = generate_latin_lowercase_alphabet();
@@ -180,8 +179,7 @@ fn permutations_example() {
 }
 
 fn permutations_occurrence_example() {
-    let string =
-        utils::read_file_to_string("il-piccolo-principe.txt").expect("could not read file");
+    let string = read_file_to_string("il-piccolo-principe.txt").expect("could not read file");
     let data = clean_data(&string);
     let alphabet = generate_latin_lowercase_alphabet();
     let primitives = CharacterInSlidingWindow::generate_permutations(&alphabet, 2);
@@ -296,4 +294,21 @@ impl Term<CharacterInSlidingWindow> {
             }
         }
     }
+}
+
+fn clean_data(string: &String) -> Vec<char> {
+    let is_alpha = Regex::new("[a-zA-Z .,]").unwrap();
+    let cleaned = string
+        .chars()
+        .map(|character| character.to_ascii_lowercase())
+        .filter(|character| is_alpha.is_match(&character.to_string()))
+        .collect();
+    cleaned
+}
+
+fn read_file_to_string(file_path: &str) -> Result<String, Error> {
+    let mut file = File::open(file_path)?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+    Ok(text)
 }

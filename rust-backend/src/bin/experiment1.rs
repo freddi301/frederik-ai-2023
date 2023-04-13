@@ -3,7 +3,9 @@ use async_graphql::{
 };
 use async_std::task;
 use indicatif::ProgressBar;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::io::Error;
 use std::{
     collections::{HashMap, HashSet},
     env,
@@ -13,7 +15,6 @@ use std::{
     time::Instant,
 };
 use tide::{http::mime, Body, Response, StatusCode};
-mod utils;
 
 struct QueryRoot;
 
@@ -30,7 +31,7 @@ impl QueryRoot {
         length: usize,
     ) -> PredictResult {
         let model = model_from_file(&model_input_path);
-        let sequence = utils::clean_data(&text);
+        let sequence = clean_data(&text);
         let details: Vec<Vec<PredictDetail>> = predict_next_characters(&model, &sequence, length)
             .iter()
             .map(|probability_by_character| {
@@ -73,9 +74,8 @@ impl MutationRoot {
         model_output_file_path: Option<String>,
     ) -> Result<Vec<PatternResult>> {
         let data_load_now = Instant::now();
-        let string =
-            utils::read_file_to_string(&text_input_file_path).expect("could not read file");
-        let data = utils::clean_data(&string[..slice.unwrap_or(string.len())].to_string());
+        let string = read_file_to_string(&text_input_file_path).expect("could not read file");
+        let data = clean_data(&string[..slice.unwrap_or(string.len())].to_string());
         let data_load_duration = data_load_now.elapsed().as_secs();
         let data_length = data.len();
         let pattern_creation_now = Instant::now();
@@ -473,3 +473,20 @@ query Predict {
   }
 }
  */
+
+fn clean_data(string: &String) -> Vec<char> {
+    let is_alpha = Regex::new("[a-zA-Z .,]").unwrap();
+    let cleaned = string
+        .chars()
+        .map(|character| character.to_ascii_lowercase())
+        .filter(|character| is_alpha.is_match(&character.to_string()))
+        .collect();
+    cleaned
+}
+
+fn read_file_to_string(file_path: &str) -> Result<String, Error> {
+    let mut file = File::open(file_path)?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+    Ok(text)
+}
