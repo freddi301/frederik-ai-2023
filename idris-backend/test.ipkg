@@ -1,0 +1,9 @@
+package test
+
+modules = Main
+
+sourcedir = src
+
+executable = executable
+
+main = Main

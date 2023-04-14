@@ -23,14 +23,71 @@ fn main() -> Result<(), Error> {
     println!("input variables: {}", input_variables_terms.len());
     let level_1_terms = create_new_level_terms(&mut term_repository, &input_variables_terms);
     println!("level 1 terms: {}", level_1_terms.len());
-    let progress =
-        indicatif::ProgressBar::new((level_1_terms.len() + input_variables_terms.len()) as u64);
-    write_csv_file(
-        "report.csv",
-        &["term", "accuracy"],
-        input_variables_terms
+    let input_and_level_1_terms: HashSet<Rc<Term<CharacterInWindow>>> = input_variables_terms
+        .iter()
+        .chain(level_1_terms.iter())
+        .cloned()
+        .collect();
+    println!("input and level 1 terms: {}", input_and_level_1_terms.len());
+    let input_and_level_1_terms_truth_tables: HashSet<TruthTable<CharacterInWindow>> =
+        input_and_level_1_terms
             .iter()
-            .chain(level_1_terms.iter())
+            .map(|term| term.compute_truth_table())
+            .collect();
+    println!(
+        "input and level 1 terms truth tables: {}",
+        input_and_level_1_terms_truth_tables.len()
+    );
+    // let level_2_terms = create_new_level_terms(&mut term_repository, &input_and_level_1_terms);
+    // println!("level 2 terms: {}", level_2_terms.len());
+    // let input_and_level_1_and_level_2_terms: HashSet<Rc<Term<CharacterInWindow>>> =
+    //     input_and_level_1_terms
+    //         .iter()
+    //         .chain(level_2_terms.iter())
+    //         .cloned()
+    //         .collect();
+    // println!(
+    //     "input and level 1 and level 2 terms: {}",
+    //     input_and_level_1_and_level_2_terms.len()
+    // );
+    // let input_and_level_1_and_level_2_terms_truth_tables: HashSet<TruthTable<CharacterInWindow>> =
+    //     input_and_level_1_and_level_2_terms
+    //         .iter()
+    //         .map(|term| term.compute_truth_table())
+    //         .collect();
+    // println!(
+    //     "input and level 1 terms and level 2 truth tables: {}",
+    //     input_and_level_1_and_level_2_terms_truth_tables.len()
+    // );
+    let progress = indicatif::ProgressBar::new((input_and_level_1_terms_truth_tables.len()) as u64);
+    write_csv_file(
+        "truth-table-report.csv",
+        &["truth_table", "accuracy"],
+        input_and_level_1_terms_truth_tables
+            .iter()
+            .map(|truth_table| {
+                progress.inc(1);
+                truth_table
+            })
+            .map(|truth_table| {
+                (
+                    format!("{:?}", truth_table),
+                    compute_accuracy::<
+                        CharacterWindow,
+                        CharacterInWindow,
+                        TruthTable<CharacterInWindow>,
+                    >(truth_table, contexts_from_data(data.clone())),
+                )
+            })
+            .map(|(truth_table, accuracy)| vec![truth_table, format!("{}", accuracy)]),
+    )?;
+    progress.finish();
+    let progress = indicatif::ProgressBar::new((input_and_level_1_terms.len()) as u64);
+    write_csv_file(
+        "term-report.csv",
+        &["term", "accuracy"],
+        input_and_level_1_terms
+            .iter()
             .map(|term| {
                 progress.inc(1);
                 term
@@ -38,10 +95,12 @@ fn main() -> Result<(), Error> {
             .map(|term| {
                 (
                     term.human_readable(),
-                    compute_accuracy(term, contexts_from_data(data.clone())),
+                    compute_accuracy::<CharacterWindow, CharacterInWindow, Term<CharacterInWindow>>(
+                        term.as_ref(),
+                        contexts_from_data(data.clone()),
+                    ),
                 )
             })
-            .filter(|(_, accuracy)| *accuracy > 0.0)
             .map(|(term, accuracy)| vec![term, format!("{}", accuracy)]),
     )?;
     progress.finish();
@@ -103,18 +162,22 @@ fn get_input_variables(
     input_variables
 }
 
-pub trait EvaluateIn<Context> {
-    fn evaluate(&self, context: &Context) -> bool;
+pub trait EvaluateVariableIn<Context> {
+    fn evaluate_variable_in(&self, context: &Context) -> bool;
 }
 
-fn compute_accuracy<Context, Variable: EvaluateIn<Context>>(
-    term: &Term<Variable>,
+pub trait EvaluateIn<Context> {
+    fn evaluate_in(&self, context: &Context) -> bool;
+}
+
+fn compute_accuracy<Context, Variable: EvaluateVariableIn<Context>, T: EvaluateIn<Context>>(
+    t: &T,
     contexts: impl Iterator<Item = Context>,
 ) -> f64 {
     let mut correct = 0;
     let mut total = 0;
     for context in contexts {
-        if term.evaluate(&context) {
+        if t.evaluate_in(&context) {
             correct += 1;
         }
         total += 1;
@@ -201,8 +264,8 @@ mod character_window {
         pub index: usize,
     }
 
-    impl EvaluateIn<CharacterWindow> for CharacterInWindow {
-        fn evaluate(&self, context: &CharacterWindow) -> bool {
+    impl EvaluateVariableIn<CharacterWindow> for CharacterInWindow {
+        fn evaluate_variable_in(&self, context: &CharacterWindow) -> bool {
             if self.negative_offset > context.index {
                 return false;
             }
@@ -233,7 +296,11 @@ mod character_window {
 mod term {
     use super::rc_repository::*;
     use super::*;
-    use std::{hash::Hash, rc::Rc};
+    use std::{
+        collections::{BTreeSet, HashMap},
+        hash::Hash,
+        rc::Rc,
+    };
 
     #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     enum Expr<Variable> {
@@ -263,16 +330,35 @@ mod term {
         pub fn or(&mut self, x: &Rc<Term<Variable>>, y: &Rc<Term<Variable>>) -> Rc<Term<Variable>> {
             self.get_or_create(Term(Expr::Or(x.clone(), y.clone())))
         }
+        pub fn conditional(
+            &mut self,
+            x: &Rc<Term<Variable>>,
+            y: &Rc<Term<Variable>>,
+        ) -> Rc<Term<Variable>> {
+            let not_x = self.not(x);
+            self.or(&not_x, y)
+        }
+        pub fn biconditional(
+            &mut self,
+            x: &Rc<Term<Variable>>,
+            y: &Rc<Term<Variable>>,
+        ) -> Rc<Term<Variable>> {
+            let and_x_y = self.and(x, y);
+            let not_x = self.not(x);
+            let not_y = self.not(y);
+            let and_not_x_not_y = self.and(&not_x, &not_y);
+            self.or(&and_x_y, &and_not_x_not_y)
+        }
     }
 
-    impl<Context, Variable: EvaluateIn<Context>> EvaluateIn<Context> for Term<Variable> {
-        fn evaluate(&self, context: &Context) -> bool {
+    impl<Context, Variable: EvaluateVariableIn<Context>> EvaluateIn<Context> for Term<Variable> {
+        fn evaluate_in(&self, context: &Context) -> bool {
             use Expr::*;
             match &self.0 {
-                Var(variable) => variable.evaluate(context),
-                Not(x) => !x.evaluate(context),
-                And(x, y) => x.evaluate(context) && y.evaluate(context),
-                Or(x, y) => x.evaluate(context) || y.evaluate(context),
+                Var(variable) => variable.evaluate_variable_in(context),
+                Not(x) => !x.evaluate_in(context),
+                And(x, y) => x.evaluate_in(context) && y.evaluate_in(context),
+                Or(x, y) => x.evaluate_in(context) || y.evaluate_in(context),
             }
         }
     }
@@ -287,5 +373,195 @@ mod term {
                 Or(x, y) => format!("({} ∨ {})", x.human_readable(), y.human_readable()),
             }
         }
+    }
+
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    pub struct TruthTable<Variable: Ord> {
+        variables: BTreeSet<Rc<Variable>>,
+        results: Vec<bool>,
+    }
+    impl<Variable: Ord + Hash> Term<Variable> {
+        fn get_variables(&self, variables: &mut BTreeSet<Rc<Variable>>) {
+            use Expr::*;
+            match &self.0 {
+                Var(variable) => {
+                    variables.insert(variable.clone());
+                }
+                Not(x) => x.get_variables(variables),
+                And(x, y) => {
+                    x.get_variables(variables);
+                    y.get_variables(variables);
+                }
+                Or(x, y) => {
+                    x.get_variables(variables);
+                    y.get_variables(variables);
+                }
+            }
+        }
+        pub fn compute_truth_table(&self) -> TruthTable<Variable> {
+            let mut variables: BTreeSet<Rc<Variable>> = BTreeSet::new();
+            self.get_variables(&mut variables);
+            let variables_index: &HashMap<Rc<Variable>, usize> = &variables
+                .iter()
+                .enumerate()
+                .map(|(index, variable)| (variable.clone(), index))
+                .collect();
+            let combinations = (2 as u32).pow(variables.len() as u32) as usize;
+            let mut results = vec![false; combinations];
+            for combination_index in 0..combinations {
+                results[combination_index] = self.evaluate_in(&TruthTableContext {
+                    variables_index,
+                    combination_index,
+                })
+            }
+            TruthTable { variables, results }
+        }
+    }
+
+    struct TruthTableContext<'a, Variable> {
+        variables_index: &'a HashMap<Rc<Variable>, usize>,
+        combination_index: usize,
+    }
+
+    impl<'a, Variable: Eq + Hash> EvaluateVariableIn<TruthTableContext<'a, Variable>> for Variable {
+        fn evaluate_variable_in(&self, context: &TruthTableContext<Variable>) -> bool {
+            let variable_index = context.variables_index.get(self).unwrap();
+            (context.combination_index >> variable_index) & 1 == 1
+        }
+    }
+
+    impl<'a, Variable: Eq + Hash> EvaluateVariableIn<HashMap<Variable, bool>> for Variable {
+        fn evaluate_variable_in(&self, context: &HashMap<Variable, bool>) -> bool {
+            *context.get(self).unwrap()
+        }
+    }
+
+    impl<Context, Variable: Ord + EvaluateVariableIn<Context>> EvaluateIn<Context>
+        for TruthTable<Variable>
+    {
+        fn evaluate_in(&self, context: &Context) -> bool {
+            let combination_index = self.variables.iter().enumerate().fold(
+                0,
+                |combination_index, (variable_index, variable)| {
+                    if variable.evaluate_variable_in(context) {
+                        combination_index | (1 << variable_index)
+                    } else {
+                        combination_index
+                    }
+                },
+            );
+            self.results[combination_index]
+        }
+    }
+
+    #[test]
+    fn test_truth_table_correctly_derived() {
+        let mut variable_repository: RcRepository<char> = RcRepository::new();
+        let mut term_repository: RcRepository<Term<char>> = RcRepository::new();
+        let a = term_repository.var(&variable_repository.get_or_create('a'));
+        let b = term_repository.var(&variable_repository.get_or_create('b'));
+        let a_and_b = term_repository.and(&a, &b);
+        let a_and_a = term_repository.and(&a, &a);
+        let b_and_a = term_repository.and(&b, &a);
+        let a_or_a = term_repository.or(&a, &a);
+        let a_or_b = term_repository.or(&a, &b);
+        let b_or_a = term_repository.or(&b, &a);
+        let not_a = term_repository.not(&a);
+        let not_not_a = term_repository.not(&not_a);
+        println!("a {:#?}", a.compute_truth_table());
+        println!("a & a {:#?}", a_and_a.compute_truth_table());
+        assert_eq!(a.compute_truth_table(), a_and_a.compute_truth_table());
+        println!("a & b {:#?}", a_and_b.compute_truth_table());
+        println!("b & a {:#?}", b_and_a.compute_truth_table());
+        assert_eq!(a_and_b.compute_truth_table(), b_and_a.compute_truth_table());
+        println!("a | a {:#?}", a_or_a.compute_truth_table());
+        assert_eq!(a.compute_truth_table(), a_or_a.compute_truth_table());
+        println!("a | b {:#?}", a_or_b.compute_truth_table());
+        println!("b | a {:#?}", b_or_a.compute_truth_table());
+        assert_eq!(a_or_b.compute_truth_table(), b_or_a.compute_truth_table());
+        println!("!a {:#?}", not_a.compute_truth_table());
+        println!("!!a {:#?}", not_not_a.compute_truth_table());
+        assert_eq!(a.compute_truth_table(), not_not_a.compute_truth_table());
+    }
+
+    #[test]
+    fn test_evaluate_truth_table() {
+        let mut variable_repository: RcRepository<char> = RcRepository::new();
+        let mut term_repository: RcRepository<Term<char>> = RcRepository::new();
+        let a = term_repository.var(&variable_repository.get_or_create('a'));
+        let b = term_repository.var(&variable_repository.get_or_create('b'));
+        let a_and_b = term_repository.and(&a, &b);
+        let a_or_b = term_repository.or(&a, &b);
+        let not_a = term_repository.not(&a);
+        assert_eq!(
+            a.compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', true)])),
+            true
+        );
+        assert_eq!(
+            a.compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', false)])),
+            false
+        );
+        assert_eq!(
+            a_and_b
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', true), ('b', true)])),
+            true
+        );
+        assert_eq!(
+            a_and_b
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', true), ('b', false)])),
+            false
+        );
+        assert_eq!(
+            a_and_b
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', false), ('b', true)])),
+            false
+        );
+        assert_eq!(
+            a_and_b
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', false), ('b', false)])),
+            false
+        );
+        assert_eq!(
+            a_or_b
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', true), ('b', true)])),
+            true
+        );
+        assert_eq!(
+            a_or_b
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', true), ('b', false)])),
+            true
+        );
+        assert_eq!(
+            a_or_b
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', false), ('b', true)])),
+            true
+        );
+        assert_eq!(
+            a_or_b
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', false), ('b', false)])),
+            false
+        );
+        assert_eq!(
+            not_a
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', true)])),
+            false
+        );
+        assert_eq!(
+            not_a
+                .compute_truth_table()
+                .evaluate_in(&HashMap::from([('a', false)])),
+            true
+        );
     }
 }
