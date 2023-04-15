@@ -52,3 +52,6 @@ se A1 allora B per forza
 se B allora A1 non è detto
 se A2 allora B per forza
 se B allora A2 non è detto
+
+- per costruire una nuova relazione prendere in esame il termine che più influise sul risultato
+- predizione del testo per ogni carattere la probabilità che sia il successivo è quante volte la sua funzione booleana ritorna vero sul totale
