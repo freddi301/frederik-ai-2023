@@ -39,6 +39,8 @@ given some facts predict what happens next, with backtracking
 - extend heading with highest
 - present the sequence wiht highest accuracy as result
 
+---
+
 conseguenza: A causa sicuramente B, B può accadere anche in assenza di A
 se A allora B per forza
 se B allora A non è detto
@@ -53,5 +55,16 @@ se B allora A1 non è detto
 se A2 allora B per forza
 se B allora A2 non è detto
 
+---
+
 - per costruire una nuova relazione prendere in esame il termine che più influise sul risultato
 - predizione del testo per ogni carattere la probabilità che sia il successivo è quante volte la sua funzione booleana ritorna vero sul totale
+
+---
+
+pattern.utility = pattern.accuracy \* pattern.condition.occurrence
+pattern.accuracy = (count every scenario where pattern.condition happens and pattern.conseguence are true) / pattern.condition.occurence
+pattern.condition.occurence = count how many times happens
+pattern.conseguence
+
+---
