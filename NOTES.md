@@ -68,3 +68,10 @@ pattern.condition.occurence = count how many times happens
 pattern.conseguence
 
 ---
+
+there are until now created variables (start with input variables)
+compute or odds table (https://en.wikipedia.org/wiki/Odds_ratio) save it ordered
+combine variables (https://en.wikipedia.org/wiki/Combination) starting with highest odd ratio pairs and save in ordered structure to form new variables not/and/or
+the ordered structure can be kept small by retaining only input variables and synthetized variables by utility treshold (see above)
+(in the creation deduplicate synthetized variables by truth table)
+character prediction is implemented by finding in the odd table the highest probability next character
