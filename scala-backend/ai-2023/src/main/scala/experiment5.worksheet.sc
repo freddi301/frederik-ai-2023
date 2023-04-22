@@ -4,8 +4,8 @@ trait Checkable[Term, Context]:
 case class At[Symbol](relativeIndex: Int, symbol: Symbol)
 given [Symbol](using Ordering[Symbol]): Ordering[At[Symbol]] = Ordering.by(Tuple.fromProductTyped[At[Symbol]])
 
-case class Cursor[Symbol](index: Int, sequence: scala.collection.immutable.IndexedSeq[Symbol]):
-  require(index >= 0 && index < sequence.length)
+case class Cursor[Symbol](index: Int, sequence: scala.collection.immutable.IndexedSeq[Symbol])
+  // require(index >= 0 && index < sequence.length)
 
 given [Symbol]: Checkable[At[Symbol], Cursor[Symbol]] with
   extension (at: At[Symbol]) def check(cursor: Cursor[Symbol]): Option[Boolean] =
@@ -32,14 +32,9 @@ extension (data: String)
 given [K, V](using Ordering[K]): Conversion[Iterable[(K, V)], scala.collection.immutable.SortedMap[K, V]] with
   def apply(iterable: Iterable[(K, V)]): scala.collection.immutable.SortedMap[K, V] = scala.collection.immutable.SortedMap.from(iterable)
 
-val ilPiccoloPrincipe = ai.utils.ilPiccoloPrincipe.into
+val ilPiccoloPrincipe = ai.utils.ilPiccoloPrincipe.take(1000).into
 
-
-
-@main
-def hello() =
-  val a = Case(Seq[(At[Char], Boolean)](), At(0, 'a')).occurrenceAndAccuracy(ilPiccoloPrincipe)
-  val b = Case(Seq[(At[Char], Boolean)](), At(0, ' ')).occurrenceAndAccuracy(ilPiccoloPrincipe)
-  val c = Case(Seq(At(-1, 'm') -> true), At(0, 'a')).occurrenceAndAccuracy(ilPiccoloPrincipe)
-  val d = Case(Seq(At(-2, 'a') -> true, At(-1, 'r') -> true), At(0, 'e')).occurrenceAndAccuracy(ilPiccoloPrincipe)
-  println("Hello, world! k")
+Case(Seq[(At[Char], Boolean)](), At(0, 'a')).occurrenceAndAccuracy(ilPiccoloPrincipe)
+Case(Seq[(At[Char], Boolean)](), At(0, ' ')).occurrenceAndAccuracy(ilPiccoloPrincipe)
+Case(Seq(At(-1, 'm') -> true), At(0, 'a')).occurrenceAndAccuracy(ilPiccoloPrincipe)
+Case(Seq(At(-2, 'a') -> true, At(-1, 'r') -> true), At(0, 'e')).occurrenceAndAccuracy(ilPiccoloPrincipe)
