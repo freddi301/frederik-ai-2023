@@ -32,14 +32,12 @@ extension (data: String)
 given [K, V](using Ordering[K]): Conversion[Iterable[(K, V)], scala.collection.immutable.SortedMap[K, V]] with
   def apply(iterable: Iterable[(K, V)]): scala.collection.immutable.SortedMap[K, V] = scala.collection.immutable.SortedMap.from(iterable)
 
-val ilPiccoloPrincipe = ai.utils.ilPiccoloPrincipe.into
-
-
-
 @main
 def hello() =
+  val ilPiccoloPrincipe = scala.io.Source.fromFile("src/main/resources/il-piccolo-principe.txt").getLines().mkString(" ").into
   val a = Case(Seq[(At[Char], Boolean)](), At(0, 'a')).occurrenceAndAccuracy(ilPiccoloPrincipe)
   val b = Case(Seq[(At[Char], Boolean)](), At(0, ' ')).occurrenceAndAccuracy(ilPiccoloPrincipe)
   val c = Case(Seq(At(-1, 'm') -> true), At(0, 'a')).occurrenceAndAccuracy(ilPiccoloPrincipe)
   val d = Case(Seq(At(-2, 'a') -> true, At(-1, 'r') -> true), At(0, 'e')).occurrenceAndAccuracy(ilPiccoloPrincipe)
   println("Hello, world! k")
+

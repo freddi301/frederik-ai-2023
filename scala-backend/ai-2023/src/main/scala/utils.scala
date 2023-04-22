@@ -48,4 +48,3 @@ extension [Item](iterator: Iterator[Item]) def withPrevious: Iterator[(Option[It
     result
   })
 
-val ilPiccoloPrincipe = scala.io.Source.fromResource("il-piccolo-principe.txt").simplifyItalian.mkString

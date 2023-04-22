@@ -1,3 +1,5 @@
+import ai.utils.*
+
 trait Checkable[Term, Context]:
   extension (term: Term) def check(context: Context): Option[Boolean]
 
@@ -32,7 +34,7 @@ extension (data: String)
 given [K, V](using Ordering[K]): Conversion[Iterable[(K, V)], scala.collection.immutable.SortedMap[K, V]] with
   def apply(iterable: Iterable[(K, V)]): scala.collection.immutable.SortedMap[K, V] = scala.collection.immutable.SortedMap.from(iterable)
 
-val ilPiccoloPrincipe = ai.utils.ilPiccoloPrincipe.take(1000).into
+val ilPiccoloPrincipe = scala.io.Source.fromResource("il-piccolo-principe.txt").simplifyItalian.mkString.into
 
 Case(Seq[(At[Char], Boolean)](), At(0, 'a')).occurrenceAndAccuracy(ilPiccoloPrincipe)
 Case(Seq[(At[Char], Boolean)](), At(0, ' ')).occurrenceAndAccuracy(ilPiccoloPrincipe)
