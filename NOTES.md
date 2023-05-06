@@ -75,3 +75,34 @@ combine variables (https://en.wikipedia.org/wiki/Combination) starting with high
 the ordered structure can be kept small by retaining only input variables and synthetized variables by utility treshold (see above)
 (in the creation deduplicate synthetized variables by truth table)
 character prediction is implemented by finding in the odd table the highest probability next character
+
+----
+
+associative memory: let be input values be neurons, output value neurons, input/output pairs, optionally layers, leran by back propagation
+
+generative model: given some data, generate more data with same probability distributions
+
+translate from one language to another:
+train on translation pairs
+learn mapping from language A to language B
+or learn mappiong from language A to intermediate alnguage I, maaping from I to B
+
+summarize: given pairs of source and summary learn mapping
+
+question/answer: given source, question, answer, leanr mapping source + question -> answer
+
+complete: given incomplete data, try to complete it
+
+forecast: observe events in training data, then given some events forecast possibility of others (ex: causes -> effects or vice versa)
+
+complete knowledge: given some concept and relations, infere more concepts and relations that hold
+
+idea! given some training data, create patterns, check patterns probability in training data, check pattern probability in test data
+
+idea! optimize by
+- implementing high level concepts in classical programming to reduce learning costs (first per task, then generalize)
+- optimize source data analysis to minimize training cost (ex: convolution and weight sharing for images, embeddings for sequences)
+
+idea! theory -> proof
+- begin with limited set of training data, make a theory, validate it by searching proofs in the rest of training data, or sythetize proofs along the way
+- apply classical inferences ex: humans are mortal, socrates is human, socrates is mortal (then validate by other factors too) 
