@@ -6,15 +6,16 @@ services:
     restart: unless-stopped
     volumes:
       - ./notebooks:/tf/notebooks
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #       - driver: nvidia
-    #         device_ids: ['0']
-    #         capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            device_ids: ['0']
+            capabilities: [gpu]
     ports:
       - '8888:8888'
+      - '6006:6006'
     networks:
       - jupyter
 networks:
