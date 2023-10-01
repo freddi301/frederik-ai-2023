@@ -28,6 +28,16 @@ training algorithm:
 - increment a hyperparameter and train as before
 - keep incrementing those hyperparameters that reduces the loss the most
 
+## Attention Head variations
+
+Aims to choose only element from the input based on its relative positional encoding and feture values
+This introduces order invariance for variable number of input elements
+The positional encoding is relative and it represent space and time
+
+The query is computed with AutoLinearLayer(input_shape=features_count, output_shape=1)
+The key is computed with AutoLinearLayer(input_shape=realtive_positional_encoding_features_count, output_shape=features_count)
+The value is compued with softmax
+
 
 ## Generl architecture
 
