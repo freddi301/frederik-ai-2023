@@ -11,6 +11,7 @@ there are two types hidden neurons in the hidden layers
 - with tanh activation function (for probality values) (better than sigmoid for vanishing gradients)
 
 Droput layer is applied after every hidden layer (overfitting prevention, better generalization)
+Layer normalization is applied after every layer (prevents number explosion)
 Also Residual connections are applied automatically (helps with vanishing gradients in deep networks, useful with "corner cases" in data)
 
 parameters:

@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": "idris-backend"
+		},
+		{
+			"path": "python-tensorflow-backend"
+		},
+		{
+			"path": "react-ui"
+		},
+		{
+			"path": "rust-backend"
+		},
+		{
+			"path": "scala-backend"
+		},
+		{
+			"path": "."
+		}
+	]
+}
