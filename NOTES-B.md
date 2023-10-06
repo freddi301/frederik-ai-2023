@@ -4,23 +4,37 @@
 
 An auto linear layer automatically adjust its hyperparameters to reduce error, it is meant to automate any linear layer.
 
-It has some dense hidden layers with a growable number neurons
+It works only increasing the hyperparameters.
 
-there are two types hidden neurons in the hidden layers
-- with prelu activation function (for continuous values) (better than relu for vanishing gradients)
-- with tanh activation function (for probality values) (better than sigmoid for vanishing gradients)
+The structure is a sequential model of dense layers
 
-Droput layer is applied after every hidden layer (overfitting prevention, better generalization)
-Layer normalization is applied after every layer (prevents number explosion)
-Also Residual connections are applied automatically (helps with vanishing gradients in deep networks, useful with "corner cases" in data)
+in each layer there are mutliple activation functions:
+- linear (for continuous values)
+- relu (for continuous values and non linearity)
+- sigmoid (for probability values) positive relationships
+- tanh (for probability values) positive and negative relationships
+- consider also variants with better vanisging gradient prevention
+
+each hidden layer has normalization:
+- L1 + L2 kernel normalization (for overfitting prevention)
+- Droput (for overfitting prevention)
+
+- Also consider Residual connections are applied automatically (helps with vanishing gradients in deep networks, useful with "corner cases" in data)
 
 parameters:
 - input_dim
 - output_dim
 auto hyper parameters:
 - hidden_layer_count
-- prelu_neurons_count (indipendent for each hidden layer)
+- linear_neurons_count (indipendent for each hidden layer)
+- relu_neurons_count (indipendent for each hidden layer)
+- sigmoid_neurons_count (indipendent for each hidden layer)
 - tanh_neurons_count (indipendent for each hidden layer)
+  
+when a hyperparameter is incremented, the layer it belongs to and the next one are reinitialized with new random weights
+the other layers are freezed (trainable = false)
+and the changed layers are retrained
+this is also known as "fine tuning"
 
 training algorithm:
 - loss function: mean squared error (popular, generic)
