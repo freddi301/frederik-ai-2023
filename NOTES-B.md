@@ -9,8 +9,8 @@ It works only increasing the hyperparameters.
 The structure is a sequential model of dense layers
 
 in each layer there are mutliple activation functions:
-- linear (for continuous values)
-- relu (for continuous values and non linearity)
+- linear (for continuous values) (initializers bias: zeros weights tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.01))
+- relu (for continuous values and non linearity) (initializers bias: constant 0.01 weights he_uniform)
 - sigmoid (for probability values) positive relationships
 - tanh (for probability values) positive and negative relationships
 - consider also variants with better vanisging gradient prevention
