@@ -6,14 +6,19 @@ An auto linear layer automatically adjust its hyperparameters to reduce error, i
 
 It works only increasing the hyperparameters.
 
-The structure is a sequential model of dense layers
+The structure is a sequential model of dense layers with a custom activation function
 
-in each layer there are mutliple activation functions:
-- linear (for continuous values) (initializers bias: zeros weights tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.01))
-- relu (for continuous values and non linearity) (initializers bias: constant 0.01 weights he_uniform)
-- sigmoid (for probability values) positive relationships
-- tanh (for probability values) positive and negative relationships
-- consider also variants with better vanisging gradient prevention
+The activation function approximates automatically the following functions:
+- linear
+- relu
+- sigmoid
+- tanh
+
+tf.where(
+    inputs > 0,
+    tf.minimum(inputs, self.upper_treshold),
+    tf.maximum(inputs, self.lower_treshold),
+)
 
 each hidden layer has normalization:
 - L1 + L2 kernel normalization (for overfitting prevention)
@@ -26,11 +31,8 @@ parameters:
 - output_dim
 auto hyper parameters:
 - hidden_layer_count
-- linear_neurons_count (indipendent for each hidden layer)
-- relu_neurons_count (indipendent for each hidden layer)
-- sigmoid_neurons_count (indipendent for each hidden layer)
-- tanh_neurons_count (indipendent for each hidden layer)
-  
+- neurons_count (indipendent for each hidden layer)
+
 when a hyperparameter is incremented, the layer it belongs to and the next one are reinitialized with new random weights
 the other layers are freezed (trainable = false)
 and the changed layers are retrained
